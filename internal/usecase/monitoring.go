@@ -35,14 +35,7 @@ func (uc *MonitoringUseCase) StartMonitoring(ctx context.Context) {
 
 // Add new method to get current monitoring data
 func (uc *MonitoringUseCase) GetCurrentMonitoring(ctx context.Context) ([]domain.MonitoringPlace, error) {
-    // Get all hexagon places
     hexagons, err := uc.parkingRepo.GetHexagonPlaces(ctx)
-    if err != nil {
-        return nil, err
-    }
-
-    // Get all supplies for reference
-    supplies, err := uc.parkingRepo.GetTrxSupplies(ctx)
     if err != nil {
         return nil, err
     }
@@ -51,23 +44,34 @@ func (uc *MonitoringUseCase) GetCurrentMonitoring(ctx context.Context) ([]domain
     for _, hexagon := range hexagons {
         polygon := util.GetPolygonPoints(hexagon.HexagonID)
         
-        // Get vehicles in this polygon
-        var driversInPolygon []string
+        // Get fleet locations from tile38
+        fleets, err := uc.tile38Repo.GetLocationsInPolygon(ctx, polygon)
+        if err != nil {
+            continue
+        }
+
+        // Get supply details for these fleets
+        supplies, err := uc.parkingRepo.GetTrxSupplies(ctx)
+        if err != nil {
+            continue
+        }
+
+        // Filter supplies to only include those in fleets
+        var driversInHexagon []string
         for _, supply := range supplies {
-            // Check if supply point is inside polygon
-            if util.IsPointInPolygon(domain.Point{
-                Latitude: supply.Latitude,
-                Longitude: supply.Longitude,
-            }, polygon) {
-                driversInPolygon = append(driversInPolygon, supply.FleetNumber)
+            for _, fleet := range fleets {
+                if supply.FleetNumber == fleet {
+                    driversInHexagon = append(driversInHexagon, supply.FleetNumber)
+                    break
+                }
             }
         }
         
         results = append(results, domain.MonitoringPlace{
             ID:      hexagon.HexagonID,
-            Total:   len(driversInPolygon),
+            Total:   len(driversInHexagon),
             Polygon: polygon,
-            Drivers: driversInPolygon,
+            Drivers: driversInHexagon,
         })
     }
     

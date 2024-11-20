@@ -32,10 +32,17 @@ func (r *tile38Repository) GetLocationsInPolygon(ctx context.Context, polygon []
         points[i] = t38c.Point{Lon: p.Longitude, Lat: p.Latitude}
     }
 
-    resp, err := r.client.Search.Within("fleet").Circle(points[0].Lat, points[0].Lon, 100).Do(ctx)
+    // Use Within with explicit area search
+    search := r.client.Search.Within("fleet")
+    resp, err := search.Bounds(
+        points[0].Lat, points[0].Lon,
+        points[2].Lat, points[2].Lon,
+    ).Do(ctx)
+    
     if err != nil {
-        return nil, err
+        return []string{}, err // Return empty slice instead of nil
     }
+    
     var fleets []string
     for _, obj := range resp.Objects {
         fleets = append(fleets, obj.ID)
